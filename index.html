@@ -356,6 +356,7 @@ footer strong{color:#fff}
   .prof-avatar{width:70px;height:70px;font-size:28px}
 }
 </style>
+<base target="_blank">
 </head>
 <body>
 
@@ -368,18 +369,18 @@ footer strong{color:#fff}
     <div class="login-title">مرحباً بك في ميعاد</div>
     <div class="login-sub">منصة حجز المواعيد الطبية في تطوان</div>
     <div class="login-city">📍 مدينة تطوان</div>
-    <form class="login-form" onsubmit="handleLogin(event)">
+    <form class="login-form" id="login-form" onsubmit="handleLogin(event); return false;">
       <div class="form-group">
         <label class="form-label">الاسم الكامل *</label>
-        <input class="form-input" type="text" id="login-name" placeholder="مثال: يوسف العمراني" required>
+        <input class="form-input" type="text" id="login-name" placeholder="مثال: يوسف العمراني" required autocomplete="name">
       </div>
       <div class="form-group">
         <label class="form-label">رقم البطاقة الوطنية (CNI) *</label>
-        <input class="form-input" type="text" id="login-cni" placeholder="مثال: AB123456" dir="ltr" required>
+        <input class="form-input" type="text" id="login-cni" placeholder="مثال: AB123456" dir="ltr" required autocomplete="off" maxlength="8" oninput="this.value = this.value.toUpperCase()">
       </div>
       <div class="form-group">
         <label class="form-label">رقم الهاتف *</label>
-        <input class="form-input" type="tel" id="login-phone" placeholder="06XXXXXXXX" dir="ltr" required>
+        <input class="form-input" type="tel" id="login-phone" placeholder="06XXXXXXXX" dir="ltr" required autocomplete="tel" maxlength="10" inputmode="numeric">
       </div>
       <div class="form-group">
         <label class="form-label">تاريخ الميلاد</label>
@@ -975,6 +976,58 @@ let mapInstance=null, mapFullInstance=null;
 let currentUser = null;
 
 /* ══════════════════════════════════════════
+   GOOGLE SHEETS HELPERS (must be before handleLogin)
+══════════════════════════════════════════ */
+async function sendToGoogleSheet(data) {
+  const maxRetries = 2;
+  let lastError;
+
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      // Method 1: POST with no-cors (primary)
+      const response = await fetch(SHEET_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      });
+
+      // Since no-cors hides response, we consider it sent
+      console.log('Data sent to Google Sheets (attempt ' + (i+1) + ')');
+      return true;
+
+    } catch (err) {
+      lastError = err;
+      console.log('Attempt ' + (i+1) + ' failed:', err);
+      if (i < maxRetries) {
+        await new Promise(r => setTimeout(r, 1000 * (i + 1))); // Exponential backoff
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+// Sync pending data when connection is available
+function syncPendingData() {
+  const pending = localStorage.getItem('pendingUserData');
+  if (pending) {
+    try {
+      const data = JSON.parse(pending);
+      sendToGoogleSheet(data)
+        .then(() => {
+          localStorage.removeItem('pendingUserData');
+          console.log('Pending data synced successfully');
+        })
+        .catch(err => console.log('Sync failed:', err));
+    } catch (e) {
+      console.log('Error parsing pending data:', e);
+    }
+  }
+}
+
+
+/* ══════════════════════════════════════════
    LOGIN / REGISTER HANDLER
 ══════════════════════════════════════════ */
 function handleLogin(e){
@@ -1046,54 +1099,6 @@ function handleLogin(e){
 }
 
 // Enhanced Google Sheets sender with retry logic
-async function sendToGoogleSheet(data) {
-  const maxRetries = 2;
-  let lastError;
-
-  for (let i = 0; i <= maxRetries; i++) {
-    try {
-      // Method 1: POST with no-cors (primary)
-      const response = await fetch(SHEET_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-      });
-
-      // Since no-cors hides response, we consider it sent
-      console.log('Data sent to Google Sheets (attempt ' + (i+1) + ')');
-      return true;
-
-    } catch (err) {
-      lastError = err;
-      console.log('Attempt ' + (i+1) + ' failed:', err);
-      if (i < maxRetries) {
-        await new Promise(r => setTimeout(r, 1000 * (i + 1))); // Exponential backoff
-      }
-    }
-  }
-
-  throw lastError;
-}
-
-// Sync pending data when connection is available
-function syncPendingData() {
-  const pending = localStorage.getItem('pendingUserData');
-  if (pending) {
-    try {
-      const data = JSON.parse(pending);
-      sendToGoogleSheet(data)
-        .then(() => {
-          localStorage.removeItem('pendingUserData');
-          console.log('Pending data synced successfully');
-        })
-        .catch(err => console.log('Sync failed:', err));
-    } catch (e) {
-      console.log('Error parsing pending data:', e);
-    }
-  }
-}
-
 /* ══════════════════════════════════════════
    CHAT BOT (AI Assistant)
 ══════════════════════════════════════════ */
@@ -1774,6 +1779,17 @@ document.addEventListener('DOMContentLoaded',()=>{
   setTimeout(initPreviewMap,500);
   // Try to sync any pending data
   setTimeout(syncPendingData, 2000);
+
+  // Extra safety: attach login form handler
+  const loginForm = document.getElementById('login-form');
+  if(loginForm){
+    loginForm.addEventListener('submit', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      handleLogin(e);
+      return false;
+    });
+  }
 });
 </script>
 </body>
