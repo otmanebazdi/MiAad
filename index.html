@@ -28,6 +28,8 @@ button{cursor:pointer;font-family:'Tajawal',sans-serif}
 input,select,textarea{font-family:'Tajawal',sans-serif}
 .page{display:none;min-height:100vh;animation:fadeIn .35s ease}
 .page.active{display:block}
+#page-login{display:none}
+#page-login.active{display:flex}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
 /* ── LOGIN PAGE ── */
@@ -357,6 +359,7 @@ footer strong{color:#fff}
   #ai-chat-panel{bottom:130px}
 }
 </style>
+<base target="_blank">
 </head>
 <body>
 
@@ -846,6 +849,7 @@ async function doLogin(){
   succEl.style.display='block';
   setTimeout(()=>{
     document.getElementById('page-login').classList.remove('active');
+    document.getElementById('page-login').style.display='none';
     document.getElementById('main-nav').style.display='flex';
     document.getElementById('mobile-nav').style.display='flex';
     go('home');
@@ -867,7 +871,8 @@ function doLogout(){
   document.getElementById('main-nav').style.display='none';
   document.getElementById('mobile-nav').style.display='none';
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.getElementById('page-login').classList.add('active');
+  document.getElementById('page-login').style.display='flex';
+    document.getElementById('page-login').classList.add('active');
   document.getElementById('inp-name').value='';
   document.getElementById('inp-cni').value='';
   document.getElementById('inp-phone').value='';
