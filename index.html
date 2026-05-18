@@ -369,7 +369,7 @@ footer strong{color:#fff}
     <div class="login-title">مرحباً بك في ميعاد</div>
     <div class="login-sub">منصة حجز المواعيد الطبية في تطوان</div>
     <div class="login-city">📍 مدينة تطوان</div>
-    <form class="login-form" id="login-form" onsubmit="event.preventDefault(); event.stopPropagation(); handleLogin(event); return false;">
+    <form class="login-form" id="login-form" onsubmit="return false;">
       <div class="form-group">
         <label class="form-label">الاسم الكامل *</label>
         <input class="form-input" type="text" id="login-name" placeholder="مثال: يوسف العمراني" required autocomplete="name">
@@ -386,7 +386,7 @@ footer strong{color:#fff}
         <label class="form-label">تاريخ الميلاد</label>
         <input class="form-input" type="date" id="login-dob">
       </div>
-      <button type="button" class="login-btn" id="login-btn" onclick="handleLogin(event)">دخول إلى الموقع →</button>
+      <button type="button" class="login-btn" id="login-btn" onclick="handleLogin()">دخول إلى الموقع →</button>
     </form>
     <div class="login-note">
       🔒 بياناتك محمية ولا تُشارك مع أطراف ثالثة.<br>
@@ -976,63 +976,32 @@ let mapInstance=null, mapFullInstance=null;
 let currentUser = null;
 
 /* ══════════════════════════════════════════
-   GOOGLE SHEETS HELPERS (must be before handleLogin)
+   GOOGLE SHEETS HELPERS
 ══════════════════════════════════════════ */
-async function sendToGoogleSheet(data) {
-  const maxRetries = 2;
-  let lastError;
-
-  for (let i = 0; i <= maxRetries; i++) {
-    try {
-      // Create an AbortController for timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-
-      // Method 1: POST with no-cors (primary)
-      const response = await fetch(SHEET_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      // Since no-cors hides response, we consider it sent
-      console.log('Data sent to Google Sheets (attempt ' + (i+1) + ')');
-      return true;
-
-    } catch (err) {
-      lastError = err;
-      console.log('Attempt ' + (i+1) + ' failed:', err);
-      if (i < maxRetries) {
-        await new Promise(r => setTimeout(r, 1000 * (i + 1))); // Exponential backoff
-      }
-    }
+function sendToGoogleSheet(data) {
+  try {
+    fetch(SHEET_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    });
+    console.log('Sent to Google Sheets');
+  } catch(err) {
+    console.log('Sheet send failed:', err);
+    localStorage.setItem('pendingUserData', JSON.stringify(data));
   }
-
-  throw lastError;
 }
 
-// Sync pending data when connection is available
 function syncPendingData() {
-  const pending = localStorage.getItem('pendingUserData');
-  if (pending) {
+  var pending = localStorage.getItem('pendingUserData');
+  if(pending) {
     try {
-      const data = JSON.parse(pending);
-      sendToGoogleSheet(data)
-        .then(() => {
-          localStorage.removeItem('pendingUserData');
-          console.log('Pending data synced successfully');
-        })
-        .catch(err => console.log('Sync failed:', err));
-    } catch (e) {
-      console.log('Error parsing pending data:', e);
-    }
+      sendToGoogleSheet(JSON.parse(pending));
+      localStorage.removeItem('pendingUserData');
+    } catch(e) {}
   }
 }
-
 
 /* ══════════════════════════════════════════
    LOGIN / REGISTER HANDLER
@@ -1041,81 +1010,55 @@ function handleLogin(e){
   if(e && e.preventDefault) e.preventDefault();
   if(e && e.stopPropagation) e.stopPropagation();
 
-  const name = document.getElementById('login-name').value.trim();
-  const cni = document.getElementById('login-cni').value.trim();
-  const phone = document.getElementById('login-phone').value.trim();
-  const dob = document.getElementById('login-dob').value;
+  var name = document.getElementById('login-name').value.trim();
+  var cni = document.getElementById('login-cni').value.trim();
+  var phone = document.getElementById('login-phone').value.trim();
+  var dob = document.getElementById('login-dob').value;
 
   if(!name || !cni || !phone){
     showToast('❌ يرجى ملء جميع الحقول الإجبارية');
     return false;
   }
 
-  // Validate CNI format (Moroccan National ID)
-  const cniRegex = /^[A-Z]{1,2}\d{6}$/;
-  if (!cniRegex.test(cni.toUpperCase())) {
+  var cniRegex = /^[A-Z]{1,2}\d{6}$/;
+  if(!cniRegex.test(cni.toUpperCase())) {
     showToast('❌ رقم البطاقة الوطنية غير صالح (مثال: AB123456)');
     return false;
   }
 
-  // Validate phone format (Moroccan)
-  const phoneRegex = /^(06|07)\d{8}$/;
-  if (!phoneRegex.test(phone)) {
+  var phoneRegex = /^(06|07)\d{8}$/;
+  if(!phoneRegex.test(phone)) {
     showToast('❌ رقم الهاتف غير صالح (مثال: 0612345678)');
     return false;
   }
 
   currentUser = {
     type: 'patient',
-    name: name, 
-    cni: cni.toUpperCase(), 
-    phone: phone, 
-    dob: dob, 
-    city:'تطوان', 
+    name: name,
+    cni: cni.toUpperCase(),
+    phone: phone,
+    dob: dob,
+    city: 'تطوان',
     date: new Date().toISOString(),
     userAgent: navigator.userAgent,
     source: 'ميعاد - تطوان'
   };
 
-  // Send to Google Sheet
-  const btn = document.getElementById('login-btn');
-  btn.textContent = 'جاري الحفظ...';
-  btn.disabled = true;
+  // HIDE OVERLAY IMMEDIATELY - no waiting, no async
+  var overlay = document.getElementById('login-overlay');
+  overlay.classList.add('hidden');
+  setTimeout(function() {
+    overlay.style.display = 'none';
+  }, 400);
 
-  // GUARANTEED: always hide overlay after max 3 seconds regardless of sheet result
-  const overlay = document.getElementById('login-overlay');
+  showToast('✅ مرحباً ' + name + '! تم الدخول إلى ميعاد');
 
-  function hideOverlay() {
-    showToast('✅ مرحباً ' + name + '! تم الدخول إلى ميعاد');
-    overlay.classList.add('hidden');
-    setTimeout(() => {
-      overlay.style.display = 'none';
-    }, 400);
-    btn.textContent = 'دخول إلى الموقع →';
-    btn.disabled = false;
-  }
-
-  // Always hide after 3 seconds max (safety timeout)
-  const safetyTimeout = setTimeout(hideOverlay, 3000);
-
-  // Try to send to Google Sheet
-  sendToGoogleSheet(currentUser)
-    .then(() => {
-      clearTimeout(safetyTimeout);
-      console.log('Data saved to Google Sheets');
-      hideOverlay();
-    })
-    .catch(err => {
-      clearTimeout(safetyTimeout);
-      console.log('Sheet error:', err);
-      localStorage.setItem('pendingUserData', JSON.stringify(currentUser));
-      hideOverlay();
-    });
+  // Send to Google Sheets in background (fire and forget)
+  sendToGoogleSheet(currentUser);
 
   return false;
 }
 
-// Enhanced Google Sheets sender with retry logic
 /* ══════════════════════════════════════════
    CHAT BOT (AI Assistant)
 ══════════════════════════════════════════ */
@@ -1791,22 +1734,10 @@ function showToast(msg){
 /* ══════════════════════════════════════════
    INIT
 ══════════════════════════════════════════ */
-document.addEventListener('DOMContentLoaded',()=>{
+document.addEventListener('DOMContentLoaded', function(){
   renderHome();
-  setTimeout(initPreviewMap,500);
-  // Try to sync any pending data
+  setTimeout(initPreviewMap, 500);
   setTimeout(syncPendingData, 2000);
-
-  // Extra safety: attach login form handler
-  const loginForm = document.getElementById('login-form');
-  if(loginForm){
-    loginForm.addEventListener('submit', function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      handleLogin(e);
-      return false;
-    });
-  }
 });
 </script>
 </body>
